@@ -1,9 +1,9 @@
 {
   "name":"pokewords-english-adventure",
-  "version":"2.0.1",
+  "version":"2.0.2",
   "description":"PokéWords v8 — RPG multijugador educativo con mundo gigante",
-  "main":"server-v8-launcher.js",
-  "scripts":{"start":"node server-v8-launcher.js","dev":"node server-v8-launcher.js"},
+  "main":"server-v8-final.js",
+  "scripts":{"start":"node server-v8-final.js","dev":"node server-v8-final.js"},
   "engines":{"node":">=18"},
   "dependencies":{"express":"^4.18.2","socket.io":"^4.6.1"}
 }
