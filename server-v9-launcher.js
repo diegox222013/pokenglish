@@ -1,1 +1,4 @@
-const fs=require('fs'),path=require('path'),vm=require('vm');let code=fs.readFileSync(path.join(__dirname,'server-v9.js'),'utf8');code=code.replace("pokemon:old.pokemon||d.pokemon&&mons[d.pokemon]?d.pokemon:'pikachu'","pokemon:(old.pokemon&&mons[old.pokemon]?old.pokemon:(d.pokemon&&mons[d.pokemon]?d.pokemon:'pikachu'))");vm.runInThisContext(code,{filename:path.join(__dirname,'server-v9.js')});
+// V9 server entrypoint.
+// Load the CommonJS server normally; do not execute it through vm,
+// because server-v9.js relies on require(), __dirname and module scope.
+require('./server-v9.js');
