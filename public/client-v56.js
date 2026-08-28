@@ -1,1 +1,0 @@
-(()=>{if(document.querySelector('script[data-v57]'))return;const s=document.createElement('script');s.src='/client-v57.js';s.dataset.v57='1';document.body.appendChild(s)})();
