@@ -1,0 +1,146 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { pingInterval: 10000, pingTimeout: 20000, maxHttpBufferSize: 1e5 });
+
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+const players = Object.create(null);
+const battles = Object.create(null);
+let roomStarted = false;
+let roomOwner = null;
+let round = 1;
+
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+const cleanName = v => String(v || 'Trainer').replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 18) || 'Trainer';
+const pokemonList = ['pikachu','raichu','squirtle','charmander','bulbasaur','pidgey','rayquaza'];
+const safePokemon = v => pokemonList.includes(v) ? v : 'pikachu';
+const questions = [
+  { q:'She _____ to the store yesterday.', a:['go','went','goes','going'], c:1 },
+  { q:'Translate: “El pájaro vuela alto.”', a:['The bird flies high.','The bird runs fast.','The cat flies high.','The bird is small.'], c:0 },
+  { q:'Choose the English word for “agua”.', a:['Fire','Water','Earth','Wind'], c:1 },
+  { q:'What is the past tense of “eat”?', a:['eated','eats','ate','eating'], c:2 },
+  { q:'“Happy” means…', a:['Triste','Feliz','Rápido','Grande'], c:1 },
+  { q:'Complete: They _____ playing football.', a:['is','am','are','be'], c:2 },
+  { q:'Choose: “I ___ a student.”', a:['am','is','are','be'], c:0 },
+  { q:'“Fast” means…', a:['Lento','Rápido','Pequeño','Frío'], c:1 }
+];
+const wildPool = [
+  {name:'Flameling',icon:'🔥',type:'Fire',hp:80,atk:16},
+  {name:'Aquafin',icon:'💧',type:'Water',hp:88,atk:14},
+  {name:'Leafling',icon:'🌿',type:'Grass',hp:84,atk:15},
+  {name:'Skybit',icon:'🪽',type:'Flying',hp:72,atk:18},
+  {name:'Voltimp',icon:'⚡',type:'Electric',hp:76,atk:19}
+];
+function publicPlayers(){
+  const out = {};
+  for(const [id,p] of Object.entries(players)) out[id] = {
+    id:p.id,name:p.name,pokemon:p.pokemon,x:p.x,y:p.y,speed:p.speed,
+    level:p.level,xp:p.xp,stats:{hp:p.stats.hp,attack:p.stats.attack}
+  };
+  return out;
+}
+function state(){ io.emit('stateUpdate', publicPlayers()); }
+function progress(id){ const p=players[id]; if(p) io.to(id).emit('progressUpdate',{level:p.level,xp:p.xp,maxXp:p.level*100,tokens:p.tokens,wins:p.wins,streak:p.streak}); }
+function award(id,xp,tokens){
+  const p=players[id]; if(!p) return;
+  p.xp += xp; p.tokens += tokens;
+  while(p.xp >= p.level*100){
+    p.xp -= p.level*100; p.level++; p.stats.hp += 8; p.stats.attack += 4;
+    io.to(id).emit('levelUp',{level:p.level,xp:p.xp,maxXp:p.level*100});
+  }
+  progress(id);
+}
+
+app.get('/health',(req,res)=>res.json({ok:true,players:Object.keys(players).length,roomStarted,round}));
+app.use(express.static('public', { extensions:['html'] }));
+
+io.on('connection', socket => {
+  console.log('Entrenador conectado:', socket.id);
+
+  socket.on('joinPlayer',(d={})=>{
+    if(players[socket.id]) return;
+    if(!roomOwner) roomOwner=socket.id;
+    const level=clamp(Number(d.level)||1,1,100);
+    players[socket.id]={
+      id:socket.id,name:cleanName(d.name),pokemon:safePokemon(d.pokemon),
+      x:clamp(Number(d.x)||480,24,936),y:clamp(Number(d.y)||270,24,516),
+      speed:clamp(Number(d.speed)||4.2,1,8),level,
+      xp:clamp(Number(d.xp)||0,0,level*100-1),tokens:clamp(Number(d.tokens)||0,0,999999),
+      wins:clamp(Number(d.wins)||0,0,999999),streak:0,
+      stats:{hp:clamp(Number(d.stats?.hp)||100,1,9999),attack:clamp(Number(d.stats?.attack)||50,1,9999)},
+      lastMove:Date.now(),lastQuestion:0
+    };
+    socket.emit('serverReady',{id:socket.id,owner:roomOwner===socket.id,round});
+    progress(socket.id); state();
+    if(roomStarted) socket.emit('roomStarted',{round});
+  });
+
+  socket.on('playerMove',(d={})=>{
+    const p=players[socket.id]; if(!p) return;
+    const now=Date.now(), elapsed=Math.max(.016,(now-p.lastMove)/1000);
+    const nx=Number(d.x),ny=Number(d.y);
+    const maxDistance=8*Math.min(elapsed,.25)+5;
+    if(!Number.isFinite(nx)||!Number.isFinite(ny)||Math.hypot(nx-p.x,ny-p.y)>maxDistance) return;
+    p.x=clamp(nx,24,936); p.y=clamp(ny,24,516); p.lastMove=now; state();
+  });
+
+  socket.on('triggerStart',()=>{
+    if(socket.id!==roomOwner) return socket.emit('serverError',{message:'Solo el creador puede iniciar la sala.'});
+    roomStarted=true; round++; io.emit('roomStarted',{round});
+  });
+
+  socket.on('battleStart',()=>{
+    const p=players[socket.id]; if(!p||!roomStarted||battles[socket.id]) return;
+    const base=wildPool[Math.floor(Math.random()*wildPool.length)];
+    const level=Math.max(1,p.level+Math.floor(Math.random()*3)-1);
+    const enemy={...base,level,maxHp:base.hp+level*8,hp:base.hp+level*8};
+    const question=questions[Math.floor(Math.random()*questions.length)];
+    battles[socket.id]={enemy,question}; p.lastQuestion=Date.now();
+    socket.emit('battleStarted',{enemy,question});
+  });
+
+  socket.on('battleAnswer',(d={})=>{
+    const p=players[socket.id],b=battles[socket.id];
+    if(!p||!b||Date.now()-p.lastQuestion<350) return;
+    const correct=Number(d.answer)===b.question.c;
+    const damage=correct?Math.max(1,p.stats.attack+p.level*2):0;
+    if(correct){
+      b.enemy.hp=Math.max(0,b.enemy.hp-damage); p.streak++;
+      if(b.enemy.hp<=0){
+        p.wins++; const xp=30+p.streak*3; delete battles[socket.id];
+        award(socket.id,xp,5); return socket.emit('battleWon',{damage,xp,tokens:5,streak:p.streak});
+      }
+    } else p.streak=0;
+    const enemyDamage=correct?Math.max(1,b.enemy.atk-4):b.enemy.atk;
+    p.stats.hp=Math.max(0,p.stats.hp-enemyDamage);
+    if(p.stats.hp<=0){
+      delete battles[socket.id]; p.stats.hp=100+p.level*8;
+      return socket.emit('battleLost',{damage:enemyDamage,respawnHp:p.stats.hp});
+    }
+    b.question=questions[Math.floor(Math.random()*questions.length)]; p.lastQuestion=Date.now();
+    socket.emit('battleUpdate',{correct,enemyHp:b.enemy.hp,playerHp:p.stats.hp,question:b.question,damage,enemyDamage}); state();
+  });
+
+  socket.on('battleRun',()=>{ if(battles[socket.id]){delete battles[socket.id];socket.emit('battleEnded',{reason:'run'});} });
+
+  socket.on('disconnect',()=>{
+    delete players[socket.id]; delete battles[socket.id];
+    if(roomOwner===socket.id) roomOwner=Object.keys(players)[0]||null;
+    if(!Object.keys(players).length){roomStarted=false;round=1;roomOwner=null;}
+    state();
+    console.log('Entrenador desconectado:',socket.id);
+  });
+});
+
+const PORT=process.env.PORT||3000;
+server.listen(PORT,()=>console.log(`🎮 PokéWords v4 server corriendo en puerto ${PORT}`));
