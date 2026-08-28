@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: pokewords
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server-v6.js
