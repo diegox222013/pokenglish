@@ -3,4 +3,4 @@ services:
     name: pokewords
     runtime: node
     buildCommand: npm install
-    startCommand: node server-v6.js
+    startCommand: node server-v9-launcher.js
