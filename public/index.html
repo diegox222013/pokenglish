@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PokéWords: English Adventure</title>
+    <style>
+        body { font-family: 'Courier New', monospace; background: #121212; color: #fff; text-align: center; margin: 0; padding: 15px; }
+        
+        #game-window { width: 880px; margin: 0 auto; background: #000; border-radius: 8px; overflow: hidden; border: 2px solid #444; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        #browser-bar { background: #222; padding: 10px 15px; text-align: left; font-size: 14px; color: #aaa; border-bottom: 2px solid #333; }
+        #game-container { padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        
+        h1 { font-size: 26px; margin: 5px 0 15px 0; letter-spacing: 1px; }
+
+        /* Pantalla de Login */
+        #login-panel { background: #1a1a1a; padding: 25px; border-radius: 8px; border: 2px solid #e74c3c; width: 380px; margin: 40px 0; text-align: left; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; color: #aaa; margin-bottom: 5px; font-weight: bold; }
+        input, select { padding: 10px; font-size: 15px; width: 100%; font-family: inherit; background: #fff; color: #000; border: none; border-radius: 4px; box-sizing: border-box; }
+        
+        /* Panel del Lobby Status */
+        #lobby-panel { background: #181818; padding: 12px 20px; border-radius: 6px; border: 2px solid #444; width: 800px; margin-bottom: 12px; display: none; grid-template-columns: 1fr auto auto; gap: 15px; align-items: center; box-sizing: border-box; }
+        #timer-container { font-size: 28px; color: #ffeb3b; font-weight: bold; }
+        
+        button { background: #e74c3c; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; font-family: inherit; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #c0392b; }
+        #start-room-btn { background: #c0392b; display: none; }
+
+        /* Canvas del Juego */
+        #canvas-wrapper { position: relative; display: none; margin-bottom: 10px; }
+        canvas { background: #7cbd50; border: 4px solid #fff; border-radius: 4px; display: block; }
+
+        /* Interfaz de Combate / Preguntas (Estilo Game Boy) */
+        #battle-console { background: #fff; color: #000; border: 5px solid #000; border-radius: 6px; padding: 15px; width: 800px; text-align: left; box-sizing: border-box; display: none; }
+        #challenge-text { font-size: 18px; font-weight: bold; margin-bottom: 15px; min-height: 45px; line-height: 1.3; }
+        
+        .battle-actions { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+        .battle-btn { background: #f8f9fa; border: 3px solid #000; padding: 8px; text-align: center; cursor: pointer; border-radius: 4px; user-select: none; }
+        .battle-btn:hover, .battle-btn.active { background: #27ae60; color: #fff; }
+        .battle-btn:hover .btn-esp, .battle-btn.active .btn-esp { color: #eee; }
+        .btn-eng { font-size: 16px; font-weight: bold; }
+        .btn-esp { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+
+<div id="game-window">
+    <div id="browser-bar">🌐 PokéWords: English Adventure - Online Multiplayer</div>
+    
+    <div id="game-container">
+        <h1>PokéWords: English Adventure</h1>
+
+        <!-- 1. Formulario de Selección de Entrenador -->
+        <div id="login-panel">
+            <div class="form-group">
+                <label for="username">USERNAME (NOMBRE DE ENTRENADOR):</label>
+                <input type="text" id="username" placeholder="Tu nombre..." value="Diegox222013" />
+            </div>
+            <div class="form-group">
+                <label for="pokemon-select">START POKÉMON:</label>
+                <select id="pokemon-select">
+                    <option value="pikachu">Pikachu ⚡</option>
+                    <option value="raichu">Raichu ⚡</option>
+                    <option value="squirtle">Squirtle 💧</option>
+                    <option value="charmander">Charmander 🔥</option>
+                    <option value="bulbasaur">Bulbasaur 🍃</option>
+                    <option value="pidgey">Pidgey 🕊️</option>
+                </select>
+            </div>
+            <button style="width:100%" onclick="joinGame()">ENTRAR AL LOBBY</button>
+        </div>
+
+        <!-- 2. Estado del Lobby y Temporizador -->
+        <div id="lobby-panel">
+            <div style="text-align: left;">
+                <span style="color: #aaa; font-size: 12px;">ENTRENADOR:</span> <strong id="lbl-name">---</strong> | 
+                <span style="color: #aaa; font-size: 12px;">POKÉMON:</span> <strong id="lbl-pokemon">---</strong>
+            </div>
+            <button id="start-room-btn" onclick="startRoom()">START ROOM (ADMIN)</button>
+            <div id="timer-container">⏱️ <span id="timer">15:00</span></div>
+        </div>
+
+        <!-- 3. Mapa Interactivo Canvas -->
+        <div id="canvas-wrapper">
+            <canvas id="gameCanvas" width="800" height="420"></canvas>
+        </div>
+
+        <!-- 4. Consola de Batalla / Materia de Inglés -->
+        <div id="battle-console">
+            <div id="challenge-text">A wild English Challenge appeared! (Muévete por el mapa para encontrar desafíos)</div>
+            
+            <div class="battle-actions">
+                <div class="battle-btn active" id="btn-fight" onclick="answerQuestion(1)">
+                    <div class="btn-eng">▶ [ FIGHT ]</div>
+                    <div class="btn-esp">[ LUCHAR ]</div>
+                </div>
+                <div class="battle-btn" id="btn-item" onclick="answerQuestion(2)">
+                    <div class="btn-eng">[ ITEM ]</div>
+                    <div class="btn-esp">[ OBJETO ]</div>
+                </div>
+                <div class="battle-btn" id="btn-pkmn" onclick="answerQuestion(3)">
+                    <div class="btn-eng">[ PKMN ]</div>
+                    <div class="btn-esp">[ PKMN ]</div>
+                </div>
+                <div class="battle-btn" id="btn-run" onclick="answerQuestion(4)">
+                    <div class="btn-eng">[ RUN ]</div>
+                    <div class="btn-esp">[ ESCAPAR ]</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Jugador local
+    let myPlayer = {
+        name: "",
+        pokemon: "pikachu",
+        x: 400,
+        y: 200,
+        speed: 5,
+        stats: { hp: 100, attack: 50 }
+    };
+
+    let otherPlayers = {};
+    let gameStarted = false;
+    let timeLeft = 15 * 60;
+    let timerInterval = null;
+    const keys = {};
+
+    // Detección de teclado
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
+
+    // Cargar sprites visuales mediante Canvas
+    const sprites = {};
+    const pokemonList = ['pikachu', 'raichu', 'squirtle', 'charmander', 'bulbasaur', 'pidgey', 'rayquaza'];
+    
+    // Inicializar colores/sprites para los Pokémon
+    const pokemonColors = {
+        pikachu: '#f1c40f',
+        raichu: '#e67e22',
+        squirtle: '#3498db',
+        charmander: '#e74c3c',
+        bulbasaur: '#2ecc71',
+        pidgey: '#95a5a6',
+        rayquaza: '#27ae60'
+    };
+
+    function joinGame() {
+        const nameInput = document.getElementById('username').value.trim();
+        const pokemonSelect = document.getElementById('pokemon-select').value;
+        if (!nameInput) return alert("¡Por favor ingresa un nombre!");
+
+        myPlayer.name = nameInput;
+        myPlayer.pokemon = pokemonSelect;
+
+        // VERIFICACIÓN DE ADMIN: Diegox222013 -> RAYQUAZA STATS ROTOS
+        if (myPlayer.name === "Diegox222013") {
+            myPlayer.pokemon = "rayquaza";
+            myPlayer.speed = 10; // Súper velocidad de movimiento
+            myPlayer.stats = { hp: 9999, attack: 9999 }; // Stats rotos
+            document.getElementById('start-room-btn').style.display = 'block';
+            alert("🔥 ¡MODO ADMIN ACTIVADO! Has obtenido a RAYQUAZA con Stats Infinitos (HP: 9999/9999).");
+        }
+
+        // Cambio de vistas
+        document.getElementById('login-panel').style.display = 'none';
+        document.getElementById('lobby-panel').style.display = 'grid';
+        document.getElementById('canvas-wrapper').style.display = 'block';
+        document.getElementById('battle-console').style.display = 'block';
+
+        document.getElementById('lbl-name').innerText = myPlayer.name;
+        document.getElementById('lbl-pokemon').innerText = myPlayer.pokemon.toUpperCase();
+
+        // Conectar jugador al servidor multijugador
+        socket.emit('joinPlayer', myPlayer);
+    }
+
+    // Eventos Socket.io
+    socket.on('stateUpdate', (players) => {
+        otherPlayers = players;
+    });
+
+    socket.on('roomStarted', () => {
+        if (!gameStarted) {
+            gameStarted = true;
+            document.getElementById('start-room-btn').style.display = 'none';
+            startTimer();
+        }
+    });
+
+    function startRoom() {
+        socket.emit('triggerStart');
+    }
+
+    function startTimer() {
+        if (timerInterval) return;
+        timerInterval = setInterval(() => {
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                document.getElementById('timer').innerText = "00:00";
+                alert("⏰ ¡El tiempo de 15 minutos de la sala ha terminado!");
+                return;
+            }
+            timeLeft--;
+            const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            const s = (timeLeft % 60).toString().padStart(2, '0');
+            document.getElementById('timer').innerText = `${m}:${s}`;
+        }, 1000);
+    }
+
+    // Bucle de física y movimiento
+    function update() {
+        if (!gameStarted && myPlayer.name !== "Diegox222013") return; // Admin puede moverse en prueba
+
+        let moved = false;
+        if (keys['w'] || keys['W'] || keys['ArrowUp']) { myPlayer.y -= myPlayer.speed; moved = true; }
+        if (keys['s'] || keys['S'] || keys['ArrowDown']) { myPlayer.y += myPlayer.speed; moved = true; }
+        if (keys['a'] || keys['A'] || keys['ArrowLeft']) { myPlayer.x -= myPlayer.speed; moved = true; }
+        if (keys['d'] || keys['D'] || keys['ArrowRight']) { myPlayer.x += myPlayer.speed; moved = true; }
+
+        // Límites del mapa canvas
+        myPlayer.x = Math.max(20, Math.min(canvas.width - 40, myPlayer.x));
+        myPlayer.y = Math.max(20, Math.min(canvas.height - 40, myPlayer.y));
+
+        if (moved) {
+            socket.emit('playerMove', { x: myPlayer.x, y: myPlayer.y });
+            checkZoneEvents();
+        }
+    }
+
+    // Verificación de colisión con zonas de preguntas de inglés
+    function checkZoneEvents() {
+        // Zona 1: Verb Forest (Bosque de Verbos)
+        if (myPlayer.x > 80 && myPlayer.x < 240 && myPlayer.y > 80 && myPlayer.y < 240) {
+            document.getElementById('challenge-text').innerHTML = 
+                "A wild 'Verb Challenge' appeared!<br>Complete: <i>'She _____ (go) to the store yesterday.'</i>";
+        } 
+        // Zona 2: Vocab Town (Pueblo Vocabulario)
+        else if (myPlayer.x > 540 && myPlayer.x < 700 && myPlayer.y > 180 && myPlayer.y < 340) {
+            document.getElementById('challenge-text').innerHTML = 
+                "A wild 'Vocab Challenge' appeared!<br>Translate to English: <i>'El pájaro vuela alto'</i>";
+        }
+    }
+
+    function answerQuestion(optionSelected) {
+        alert(`Seleccionaste la opción ${optionSelected}. ¡Aquí se evaluará el contenido de inglés que me envíes!`);
+    }
+
+    // Dibujado gráfico en Canvas
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Fondo y Caminos del Mapa (Estilo Pokémon Kanto)
+        ctx.fillStyle = '#edd298'; // Camino de arena
+        ctx.fillRect(360, 0, 80, canvas.height);
+        ctx.fillRect(0, 200, canvas.width, 60);
+
+        // Zona 1: Verb Forest
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(80, 80, 160, 140);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Courier New';
+        ctx.fillText('VERB FOREST 🌲', 95, 150);
+
+        // Zona 2: Vocab Town
+        ctx.fillStyle = '#2980b9';
+        ctx.fillRect(540, 180, 160, 140);
+        ctx.fillStyle = '#fff';
+        ctx.fillText('VOCAB TOWN 🏰', 555, 250);
+
+        // Dibujar otros jugadores multijugador
+        for (let id in otherPlayers) {
+            const p = otherPlayers[id];
+            
+            // Si es el admin Rayquaza, dibujarlo más grande
+            const size = p.pokemon === 'rayquaza' ? 45 : 28;
+            
+            ctx.fillStyle = pokemonColors[p.pokemon] || '#e74c3c';
+            ctx.fillRect(p.x - size/2, p.y - size/2, size, size);
+            
+            // Borde del sprite
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(p.x - size/2, p.y - size/2, size, size);
+
+            // Etiqueta sobre el jugador
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px Courier New';
+            
+            if (p.pokemon === 'rayquaza') {
+                ctx.fillStyle = '#ffeb3b';
+                ctx.fillText(`👑 ${p.name} [ADMIN - RAYQUAZA]`, p.x - 65, p.y - 30);
+                ctx.fillText(`HP: 9999/9999`, p.x - 35, p.y - 18);
+            } else {
+                ctx.fillText(`${p.name} (${p.pokemon})`, p.x - 30, p.y - 18);
+            }
+        }
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+</script>
+</body>
+</html>
