@@ -1,0 +1,1 @@
+(()=>{S.on('serverReady',d=>{if(d&&d.owner)setTimeout(()=>S.emit('triggerStart'),250)});})();
