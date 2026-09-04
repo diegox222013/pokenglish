@@ -1,9 +1,15 @@
 {
   "name": "pokewords-english-adventure",
-  "version": "3.0.1",
-  "description": "PokéWords SUPREME — RPG multijugador educativo con mundo gigante",
-  "main": "server-v9-launcher.js",
-  "scripts": {"start": "node server-v9-launcher.js", "dev": "node server-v9-launcher.js"},
-  "engines": {"node": ">=18"},
-  "dependencies": {"express": "^4.18.2", "socket.io": "^4.6.1"}
+  "version": "3.0.2",
+  "description": "PokéWords — RPG multijugador educativo con mundo gigante",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
 }
