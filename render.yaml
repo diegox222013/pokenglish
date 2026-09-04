@@ -3,4 +3,4 @@ services:
     name: pokewords
     runtime: node
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: node server-live.js
